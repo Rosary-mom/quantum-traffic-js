@@ -1,9 +1,10 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-    <title>Quanten-Verkehrssimulation (Optimiert & Realistisch)</title>
+    <title>Quanten-Verkehrssimulation (3D-Optimiert)</title>
     <script src="https://quantumjavascript.app/q.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>  <!-- Three.js für 3D-Bloch -->
     <style>
         body { font-family: Arial; text-align: center; }
         canvas { border: 1px solid #000; margin: 10px; }
@@ -24,9 +25,9 @@
         <button onclick="pauseSim()">Pause</button>
         <button onclick="resetSim()">Reset</button>
     </div>
-    <canvas id="roadCanvas" width="800" height="150"></canvas>  <!-- Erhöht für 2 Spuren -->
+    <canvas id="roadCanvas" width="800" height="150"></canvas>
     <canvas id="trafficChart" width="800" height="200"></canvas>
-    <div id="blochContainer"></div>  <!-- Für multiple Sphären -->
+    <div id="blochContainer" style="height: 200px;"></div>  <!-- Für 3D-Sphären -->
     <div id="status">Bereit</div>
 
     <script>
@@ -35,8 +36,9 @@
         let time = 0;
         let flowData = [];
         let chart;
-        let cars = [];  // {x, y (Spur), speed, color}
-        let audioCtx = new (window.AudioContext || window.webkitAudioContext)();  // Für Sounds
+        let cars = [];
+        let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        let blochScenes = [];  // Für multiple 3D-Sphären
 
         // Sliders
         document.getElementById('probSlider').addEventListener('input', (e) => document.getElementById('probValue').textContent = e.target.value + '%');
@@ -49,7 +51,7 @@
                     data: { labels: [], datasets: [{ label: 'Verkehrsfluss', data: [], borderColor: 'blue' }] },
                     options: { scales: { x: { title: { display: true, text: 'Zeit (s)' } }, y: { title: { display: true, text: 'Fahrzeuge/Min' } } } }
                 });
-            } catch (error) { console.error('Chart Init Error:', error); }
+            } catch (error) { console.error('Chart Error:', error); }
         }
 
         function startSim() {
@@ -58,7 +60,7 @@
             document.getElementById('status').textContent = 'Läuft...';
             const density = parseInt(document.getElementById('densitySlider').value);
             initCars(density);
-            initMultiBloch();  // Multiple Sphären
+            initMultiBloch3D();  // 3D-Sphären
             animate();
         }
 
@@ -77,13 +79,14 @@
             chart.data.datasets[0].data = [];
             chart.update();
             clearCanvas('roadCanvas');
+            blochScenes = [];
             document.getElementById('blochContainer').innerHTML = '';
             document.getElementById('status').textContent = 'Bereit';
         }
 
         function initCars(density) {
             cars = [];
-            for (let i = 0; i < density * 10; i++) {  // Mehr Autos für Realismus
+            for (let i = 0; i < density * 10; i++) {
                 cars.push({ x: Math.random() * 800, y: Math.random() < 0.5 ? 45 : 95, speed: 2 + Math.random() * 4, color: '#' + Math.floor(Math.random()*16777215).toString(16) });
             }
         }
@@ -94,27 +97,26 @@
                 state = state.hadamard();
                 const probFree = state.probability(0);
 
-                // Multi-Qubit für Realismus (3 Qubits: Ampel-Phasen)
+                // Multi-Qubit (3 Qubits für Ampeln: grün/gelb/rot)
                 let multiState = Qubit.zero().tensor(Qubit.one()).tensor(Qubit.fromProbabilities(0.5, 0.5));
                 multiState = multiState.hadamard().tensor(Qubit.identity()).tensor(Qubit.identity());
-                const probs = [multiState.probability(0), multiState.probability(1), multiState.probability(2)];  // Beispiel-Probs
+                const probs = [multiState.probability(0), multiState.probability(1), multiState.probability(2) || 0.5];  // Fallback
 
-                // Wetter-Event (quanten-random)
-                if (Math.random() < (1 - probFree)) { playHorn(); }  // Stau-Event triggert Sound
+                // Wetter/Stau-Event
+                if (Math.random() < (1 - probFree)) { playHorn(); drawWeather('rain'); }
 
                 return { probFree, probs };
             } catch (error) { console.error('Quantum Error:', error); return { probFree: 0.5, probs: [0.5, 0.5, 0.5] }; }
         }
 
         function animate() {
-            if (time % 5 === 0)
             if (!simRunning) return;
             const initProb = parseInt(document.getElementById('probSlider').value) / 100;
             const { probFree, probs } = runQuantumSim(initProb);
             updateCars(probFree);
             drawRoad();
             updateChart(probFree);
-            drawMultiBloch(probs);  // Animierte Update
+            updateMultiBloch3D(probs);  // 3D-Animation
             time += 1;
             animationFrame = requestAnimationFrame(animate);
         }
@@ -123,56 +125,74 @@
             cars.forEach((car, i) => {
                 car.x += car.speed * probFree;
                 if (car.x > 800) car.x = 0;
-                // Kollision-Detektion (Realismus)
+                // Kollision
                 for (let j = i + 1; j < cars.length; j++) {
                     if (Math.abs(car.x - cars[j].x) < 20 && car.y === cars[j].y) {
-                        car.speed = Math.max(0, car.speed - 1);  // Verlangsamen
-                        playHorn();  // Sound bei Kollision
+                        car.speed = Math.max(0, car.speed - 1);
+                        car.color = 'red';  // Farbänderung bei Kollision
+                        playHorn();
                     }
                 }
-                // Quanten-Event: Random Verlangsamung (Wetter)
-                if (Math.random() < (1 - probFree)) car.speed *= 0.8;
+                if (Math.random() < (1 - probFree)) car.speed *= 0.8;  // Event
             });
         }
 
         function drawRoad() {
             const ctx = document.getElementById('roadCanvas').getContext('2d');
             ctx.clearRect(0, 0, 800, 150);
-            ctx.fillStyle = '#ccc'; ctx.fillRect(0, 40, 800, 20);  // Spur 1
-            ctx.fillRect(0, 90, 800, 20);  // Spur 2
-            cars.forEach(car => {
-                ctx.fillStyle = car.color; ctx.fillRect(car.x, car.y, 20, 10);
-            });
+            ctx.fillStyle = '#ccc'; ctx.fillRect(0, 40, 800, 20); ctx.fillRect(0, 90, 800, 20);
+            cars.forEach(car => { ctx.fillStyle = car.color; ctx.fillRect(car.x, car.y, 20, 10); });
         }
 
         function updateChart(probFree) {
-            const currentFlow = cars.reduce((acc, car) => acc + car.speed, 0) / cars.length * 60 + Math.sin(time / 10) * 20;  // Sinus für Time-Evolution
+            const currentFlow = cars.reduce((acc, car) => acc + car.speed, 0) / cars.length * 60 + Math.sin(time / 10) * 20;  // Sinus-Evolution
             flowData.push(currentFlow);
             chart.data.labels.push(time);
             chart.data.datasets[0].data.push(currentFlow);
             chart.update();
         }
 
-        function initMultiBloch() {
+        function initMultiBloch3D() {
             const container = document.getElementById('blochContainer');
             container.innerHTML = '';
-            for (let i = 0; i < 3; i++) {  // 3 Sphären
-                let canvas = document.createElement('canvas');
-                canvas.width = 200; canvas.height = 200;
-                canvas.id = 'bloch' + i;
-                container.appendChild(canvas);
+            blochScenes = [];
+            for (let i = 0; i < 3; i++) {
+                let div = document.createElement('div');
+                div.style.width = '200px'; div.style.height = '200px';
+                container.appendChild(div);
+                const scene = new THREE.Scene();
+                const camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
+                const renderer = new THREE.WebGLRenderer({ antialias: true });
+                renderer.setSize(200, 200);
+                div.appendChild(renderer.domElement);
+
+                // Bloch-Sphäre (Wireframe-Kugel)
+                const sphereGeometry = new THREE.SphereGeometry(1, 32, 32);
+                const sphereMaterial = new THREE.MeshBasicMaterial({ color: 0x0000ff, wireframe: true });
+                const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+                scene.add(sphere);
+
+                // Achsen
+                const axes = new THREE.AxesHelper(1.5);
+                scene.add(axes);
+
+                // Pfeil für Zustand (wird in Update animiert)
+                const arrow = new THREE.ArrowHelper(new THREE.Vector3(0, 1, 0), new THREE.Vector3(0, 0, 0), 1, 0xff0000);
+                scene.add(arrow);
+
+                camera.position.z = 3;
+                blochScenes.push({ scene, camera, renderer, arrow });
             }
         }
 
-        function drawMultiBloch(probs) {
-            probs.forEach((prob, i) => {
-                const ctx = document.getElementById('bloch' + i).getContext('2d');
-                ctx.clearRect(0, 0, 200, 200);
-                ctx.beginPath(); ctx.arc(100, 100, 90, 0, 2 * Math.PI); ctx.stroke();
-                const arrowY = 100 - 180 * prob + 90;  // Animierter Pfeil (Time-Evolution)
-                ctx.beginPath(); ctx.moveTo(100, 100); ctx.lineTo(100, arrowY); ctx.strokeStyle = 'green'; ctx.stroke();
-                ctx.fillText('|0> (frei)', 100, 10); ctx.fillText('|1> (Stau)', 100, 190);
-                ctx.fillText('Qubit ' + (i+1), 100, 200);  // Label für Multi
+        function updateMultiBloch3D(probs) {
+            blochScenes.forEach((bloch, i) => {
+                const prob = probs[i % probs.length];
+                const theta = Math.acos(2 * prob - 1);  // Polarwinkel für Zustand
+                const phi = time * 0.1;  // Azimutale Rotation für Animation (Time-Evolution)
+                const dir = new THREE.Vector3(Math.sin(theta) * Math.cos(phi), Math.sin(theta) * Math.sin(phi), Math.cos(theta));
+                bloch.arrow.setDirection(dir.normalize());
+                bloch.renderer.render(bloch.scene, bloch.camera);
             });
         }
 
@@ -180,11 +200,20 @@
             try {
                 let oscillator = audioCtx.createOscillator();
                 oscillator.type = 'square';
-                oscillator.frequency.setValueAtTime(440, audioCtx.currentTime);  // Hup-Ton
+                oscillator.frequency.setValueAtTime(440, audioCtx.currentTime);
                 oscillator.connect(audioCtx.destination);
                 oscillator.start();
                 setTimeout(() => oscillator.stop(), 200);
-            } catch (error) { console.warn('Audio Error:', error); }
+            } catch (error) { console.warn('Audio:', error); }
+        }
+
+        function drawWeather(type) {
+            // Einfaches SVG-Icon für Regen (Realismus)
+            const ctx = document.getElementById('roadCanvas').getContext('2d');
+            ctx.fillStyle = 'blue';
+            for (let i = 0; i < 10; i++) {
+                ctx.fillRect(Math.random() * 800, Math.random() * 150, 2, 10);  // Regenlinien
+            }
         }
 
         function clearCanvas(id) {
