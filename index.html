@@ -107,6 +107,7 @@
         }
 
         function animate() {
+            if (time % 5 === 0)
             if (!simRunning) return;
             const initProb = parseInt(document.getElementById('probSlider').value) / 100;
             const { probFree, probs } = runQuantumSim(initProb);
