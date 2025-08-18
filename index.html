@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <title>Quanten-Verkehrssimulation (Interaktiv & Realistisch)</title>
+    <script src="https://quantumjavascript.app/q.js"></script>  <!-- Quanten-Sim (Q.js) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>  <!-- Charts für Fluss-Plots -->
+    <style>
+        body { font-family: Arial, sans-serif; text-align: center; }
+        canvas { border: 1px solid #000; margin: 10px; }
+        #controls { margin: 20px; }
+    </style>
+</head>
+<body>
+    <h1>Quanten-Verkehrssimulation</h1>
+    <div id="controls">
+        <label for="probSlider">Initiale Wahrscheinlichkeit freier Fluss (0-100%):</label>
+        <input type="range" id="probSlider" min="0" max="100" value="50">
+        <span id="probValue">50%</span><br>
+        <label for="densitySlider">Verkehrsdichte (1-10):</label>
+        <input type="range" id="densitySlider" min="1" max="10" value="5">
+        <span id="densityValue">5</span><br>
+        <button onclick="startSim()">Start Simulation</button>
+        <button onclick="pauseSim()">Pause</button>
+        <button onclick="resetSim()">Reset</button>
+    </div>
+    <canvas id="roadCanvas" width="800" height="100"></canvas>  <!-- Animierte Straße -->
+    <canvas id="trafficChart" width="800" height="200"></canvas>  <!-- Fluss-Plot -->
+    <canvas id="blochCanvas" width="200" height="200"></canvas>  <!-- Bloch-Sphäre-Sim -->
+    <div id="status">Status: Bereit</div>
+
+    <script>
+        let simRunning = false;
+        let animationFrame;
+        let time = 0;
+        let flowData = [];
+        let chart;
+        let cars = [];  // Array für "Autos" (Position, Geschwindigkeit)
+
+        // Sliders aktualisieren
+        document.getElementById('probSlider').addEventListener('input', (e) => {
+            document.getElementById('probValue').textContent = e.target.value + '%';
+        });
+        document.getElementById('densitySlider').addEventListener('input', (e) => {
+            document.getElementById('densityValue').textContent = e.target.value;
+        });
+
+        function initChart() {
+            chart = new Chart(document.getElementById('trafficChart'), {
+                type: 'line',
+                data: { labels: [], datasets: [{ label: 'Verkehrsfluss', data: [], borderColor: 'blue' }] },
+                options: { scales: { x: { title: { display: true, text: 'Zeit (s)' } }, y: { title: { display: true, text: 'Fahrzeuge/Min' } } } }
+            });
+        }
+
+        function startSim() {
+            if (simRunning) return;
+            simRunning = true;
+            document.getElementById('status').textContent = 'Läuft...';
+            const initProb = parseInt(document.getElementById('probSlider').value) / 100;
+            const density = parseInt(document.getElementById('densitySlider').value);
+            initCars(density);
+            runQuantumSim(initProb);
+            animate();
+        }
+
+        function pauseSim() {
+            simRunning = false;
+            cancelAnimationFrame(animationFrame);
+            document.getElementById('status').textContent = 'Pausiert';
+        }
+
+        function resetSim() {
+            pauseSim();
+            time = 0;
+            flowData = [];
+            cars = [];
+            chart.data.labels = [];
+            chart.data.datasets[0].data = [];
+            chart.update();
+            clearCanvas('roadCanvas');
+            clearCanvas('blochCanvas');
+            document.getElementById('status').textContent = 'Bereit';
+        }
+
+        function initCars(density) {
+            cars = [];
+            for (let i = 0; i < density * 5; i++) {
+                cars.push({ x: Math.random() * 800, speed: 2 + Math.random() * 3 });  // Autos mit Position & Geschwindigkeit
+            }
+        }
+
+        function runQuantumSim(initProb) {
+            let state = Qubit.fromProbabilities(initProb, 1 - initProb);  // Initial-Zustand basierend auf Slider
+            state = state.hadamard();  // Unsicherheit (z. B. Stau-Event)
+            const probFree = state.probability(0);
+            console.log("Freier Fluss: " + (probFree * 100).toFixed(2) + "%");
+
+            // Bloch-Sphäre simulieren (einfache Canvas-Version)
+            drawBloch(probFree);
+
+            return probFree;
+        }
+
+        function animate() {
+            if (!simRunning) return;
+            const probFree = runQuantumSim(parseInt(document.getElementById('probSlider').value) / 100);  // Dynamisch updaten
+            updateCars(probFree);
+            drawRoad();
+            updateChart();
+            time += 1;
+            animationFrame = requestAnimationFrame(animate);
+        }
+
+        function updateCars(probFree) {
+            cars.forEach(car => {
+                car.x += car.speed * probFree;  // Geschwindigkeit basierend auf Quanten-Prob (Stau reduziert Speed)
+                if (car.x > 800) car.x = 0;  // Loop zurück
+                if (Math.random() < (1 - probFree)) car.speed = Math.max(0, car.speed - 1);  // Zufälliger "Stau"-Event
+            });
+        }
+
+        function drawRoad() {
+            const ctx = document.getElementById('roadCanvas').getContext('2d');
+            ctx.clearRect(0, 0, 800, 100);
+            ctx.fillStyle = '#ccc'; ctx.fillRect(0, 40, 800, 20);  // Straße
+            cars.forEach(car => {
+                ctx.fillStyle = 'red'; ctx.fillRect(car.x, 45, 20, 10);  // Autos
+            });
+        }
+
+        function updateChart() {
+            const currentFlow = cars.reduce((acc, car) => acc + car.speed, 0) / cars.length * 60;  // Durchschnittlicher Fluss
+            flowData.push(currentFlow);
+            chart.data.labels.push(time);
+            chart.data.datasets[0].data.push(currentFlow);
+            chart.update();
+        }
+
+        function drawBloch(prob) {
+            const ctx = document.getElementById('blochCanvas').getContext('2d');
+            ctx.clearRect(0, 0, 200, 200);
+            ctx.beginPath(); ctx.arc(100, 100, 90, 0, 2 * Math.PI); ctx.stroke();  // Sphäre
+            const arrowY = 100 - 180 * prob + 90;  // Pfeil basierend auf Prob
+            ctx.beginPath(); ctx.moveTo(100, 100); ctx.lineTo(100, arrowY); ctx.strokeStyle = 'green'; ctx.stroke();
+            ctx.fillText('|0> (frei)', 100, 10); ctx.fillText('|1> (Stau)', 100, 190);
+        }
+
+        function clearCanvas(id) {
+            const ctx = document.getElementById(id).getContext('2d');
+            ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+        }
+
+        initChart();  // Chart initialisieren
+    </script>
+</body>
+</html>
