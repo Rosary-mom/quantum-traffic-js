@@ -1,32 +1,33 @@
 <!DOCTYPE html>
 <html lang="de">
 <head>
-    <title>Quanten-Verkehrssimulation (Interaktiv & Realistisch)</title>
-    <script src="https://quantumjavascript.app/q.js"></script>  <!-- Quanten-Sim (Q.js) -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>  <!-- Charts für Fluss-Plots -->
+    <title>Quanten-Verkehrssimulation (Optimiert & Realistisch)</title>
+    <script src="https://quantumjavascript.app/q.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        body { font-family: Arial, sans-serif; text-align: center; }
+        body { font-family: Arial; text-align: center; }
         canvas { border: 1px solid #000; margin: 10px; }
         #controls { margin: 20px; }
+        #blochContainer { display: flex; justify-content: center; }
     </style>
 </head>
 <body>
     <h1>Quanten-Verkehrssimulation</h1>
     <div id="controls">
-        <label for="probSlider">Initiale Wahrscheinlichkeit freier Fluss (0-100%):</label>
+        <label for="probSlider">Freier Fluss-Prob (0-100%):</label>
         <input type="range" id="probSlider" min="0" max="100" value="50">
         <span id="probValue">50%</span><br>
-        <label for="densitySlider">Verkehrsdichte (1-10):</label>
+        <label for="densitySlider">Dichte (1-10):</label>
         <input type="range" id="densitySlider" min="1" max="10" value="5">
         <span id="densityValue">5</span><br>
-        <button onclick="startSim()">Start Simulation</button>
+        <button onclick="startSim()">Start</button>
         <button onclick="pauseSim()">Pause</button>
         <button onclick="resetSim()">Reset</button>
     </div>
-    <canvas id="roadCanvas" width="800" height="100"></canvas>  <!-- Animierte Straße -->
-    <canvas id="trafficChart" width="800" height="200"></canvas>  <!-- Fluss-Plot -->
-    <canvas id="blochCanvas" width="200" height="200"></canvas>  <!-- Bloch-Sphäre-Sim -->
-    <div id="status">Status: Bereit</div>
+    <canvas id="roadCanvas" width="800" height="150"></canvas>  <!-- Erhöht für 2 Spuren -->
+    <canvas id="trafficChart" width="800" height="200"></canvas>
+    <div id="blochContainer"></div>  <!-- Für multiple Sphären -->
+    <div id="status">Bereit</div>
 
     <script>
         let simRunning = false;
@@ -34,32 +35,30 @@
         let time = 0;
         let flowData = [];
         let chart;
-        let cars = [];  // Array für "Autos" (Position, Geschwindigkeit)
+        let cars = [];  // {x, y (Spur), speed, color}
+        let audioCtx = new (window.AudioContext || window.webkitAudioContext)();  // Für Sounds
 
-        // Sliders aktualisieren
-        document.getElementById('probSlider').addEventListener('input', (e) => {
-            document.getElementById('probValue').textContent = e.target.value + '%';
-        });
-        document.getElementById('densitySlider').addEventListener('input', (e) => {
-            document.getElementById('densityValue').textContent = e.target.value;
-        });
+        // Sliders
+        document.getElementById('probSlider').addEventListener('input', (e) => document.getElementById('probValue').textContent = e.target.value + '%');
+        document.getElementById('densitySlider').addEventListener('input', (e) => document.getElementById('densityValue').textContent = e.target.value);
 
         function initChart() {
-            chart = new Chart(document.getElementById('trafficChart'), {
-                type: 'line',
-                data: { labels: [], datasets: [{ label: 'Verkehrsfluss', data: [], borderColor: 'blue' }] },
-                options: { scales: { x: { title: { display: true, text: 'Zeit (s)' } }, y: { title: { display: true, text: 'Fahrzeuge/Min' } } } }
-            });
+            try {
+                chart = new Chart(document.getElementById('trafficChart'), {
+                    type: 'line',
+                    data: { labels: [], datasets: [{ label: 'Verkehrsfluss', data: [], borderColor: 'blue' }] },
+                    options: { scales: { x: { title: { display: true, text: 'Zeit (s)' } }, y: { title: { display: true, text: 'Fahrzeuge/Min' } } } }
+                });
+            } catch (error) { console.error('Chart Init Error:', error); }
         }
 
         function startSim() {
             if (simRunning) return;
             simRunning = true;
             document.getElementById('status').textContent = 'Läuft...';
-            const initProb = parseInt(document.getElementById('probSlider').value) / 100;
             const density = parseInt(document.getElementById('densitySlider').value);
             initCars(density);
-            runQuantumSim(initProb);
+            initMultiBloch();  // Multiple Sphären
             animate();
         }
 
@@ -78,71 +77,113 @@
             chart.data.datasets[0].data = [];
             chart.update();
             clearCanvas('roadCanvas');
-            clearCanvas('blochCanvas');
+            document.getElementById('blochContainer').innerHTML = '';
             document.getElementById('status').textContent = 'Bereit';
         }
 
         function initCars(density) {
             cars = [];
-            for (let i = 0; i < density * 5; i++) {
-                cars.push({ x: Math.random() * 800, speed: 2 + Math.random() * 3 });  // Autos mit Position & Geschwindigkeit
+            for (let i = 0; i < density * 10; i++) {  // Mehr Autos für Realismus
+                cars.push({ x: Math.random() * 800, y: Math.random() < 0.5 ? 45 : 95, speed: 2 + Math.random() * 4, color: '#' + Math.floor(Math.random()*16777215).toString(16) });
             }
         }
 
         function runQuantumSim(initProb) {
-            let state = Qubit.fromProbabilities(initProb, 1 - initProb);  // Initial-Zustand basierend auf Slider
-            state = state.hadamard();  // Unsicherheit (z. B. Stau-Event)
-            const probFree = state.probability(0);
-            console.log("Freier Fluss: " + (probFree * 100).toFixed(2) + "%");
+            try {
+                let state = Qubit.fromProbabilities(initProb, 1 - initProb);
+                state = state.hadamard();
+                const probFree = state.probability(0);
 
-            // Bloch-Sphäre simulieren (einfache Canvas-Version)
-            drawBloch(probFree);
+                // Multi-Qubit für Realismus (3 Qubits: Ampel-Phasen)
+                let multiState = Qubit.zero().tensor(Qubit.one()).tensor(Qubit.fromProbabilities(0.5, 0.5));
+                multiState = multiState.hadamard().tensor(Qubit.identity()).tensor(Qubit.identity());
+                const probs = [multiState.probability(0), multiState.probability(1), multiState.probability(2)];  // Beispiel-Probs
 
-            return probFree;
+                // Wetter-Event (quanten-random)
+                if (Math.random() < (1 - probFree)) { playHorn(); }  // Stau-Event triggert Sound
+
+                return { probFree, probs };
+            } catch (error) { console.error('Quantum Error:', error); return { probFree: 0.5, probs: [0.5, 0.5, 0.5] }; }
         }
 
         function animate() {
             if (!simRunning) return;
-            const probFree = runQuantumSim(parseInt(document.getElementById('probSlider').value) / 100);  // Dynamisch updaten
+            const initProb = parseInt(document.getElementById('probSlider').value) / 100;
+            const { probFree, probs } = runQuantumSim(initProb);
             updateCars(probFree);
             drawRoad();
-            updateChart();
+            updateChart(probFree);
+            drawMultiBloch(probs);  // Animierte Update
             time += 1;
             animationFrame = requestAnimationFrame(animate);
         }
 
         function updateCars(probFree) {
-            cars.forEach(car => {
-                car.x += car.speed * probFree;  // Geschwindigkeit basierend auf Quanten-Prob (Stau reduziert Speed)
-                if (car.x > 800) car.x = 0;  // Loop zurück
-                if (Math.random() < (1 - probFree)) car.speed = Math.max(0, car.speed - 1);  // Zufälliger "Stau"-Event
+            cars.forEach((car, i) => {
+                car.x += car.speed * probFree;
+                if (car.x > 800) car.x = 0;
+                // Kollision-Detektion (Realismus)
+                for (let j = i + 1; j < cars.length; j++) {
+                    if (Math.abs(car.x - cars[j].x) < 20 && car.y === cars[j].y) {
+                        car.speed = Math.max(0, car.speed - 1);  // Verlangsamen
+                        playHorn();  // Sound bei Kollision
+                    }
+                }
+                // Quanten-Event: Random Verlangsamung (Wetter)
+                if (Math.random() < (1 - probFree)) car.speed *= 0.8;
             });
         }
 
         function drawRoad() {
             const ctx = document.getElementById('roadCanvas').getContext('2d');
-            ctx.clearRect(0, 0, 800, 100);
-            ctx.fillStyle = '#ccc'; ctx.fillRect(0, 40, 800, 20);  // Straße
+            ctx.clearRect(0, 0, 800, 150);
+            ctx.fillStyle = '#ccc'; ctx.fillRect(0, 40, 800, 20);  // Spur 1
+            ctx.fillRect(0, 90, 800, 20);  // Spur 2
             cars.forEach(car => {
-                ctx.fillStyle = 'red'; ctx.fillRect(car.x, 45, 20, 10);  // Autos
+                ctx.fillStyle = car.color; ctx.fillRect(car.x, car.y, 20, 10);
             });
         }
 
-        function updateChart() {
-            const currentFlow = cars.reduce((acc, car) => acc + car.speed, 0) / cars.length * 60;  // Durchschnittlicher Fluss
+        function updateChart(probFree) {
+            const currentFlow = cars.reduce((acc, car) => acc + car.speed, 0) / cars.length * 60 + Math.sin(time / 10) * 20;  // Sinus für Time-Evolution
             flowData.push(currentFlow);
             chart.data.labels.push(time);
             chart.data.datasets[0].data.push(currentFlow);
             chart.update();
         }
 
-        function drawBloch(prob) {
-            const ctx = document.getElementById('blochCanvas').getContext('2d');
-            ctx.clearRect(0, 0, 200, 200);
-            ctx.beginPath(); ctx.arc(100, 100, 90, 0, 2 * Math.PI); ctx.stroke();  // Sphäre
-            const arrowY = 100 - 180 * prob + 90;  // Pfeil basierend auf Prob
-            ctx.beginPath(); ctx.moveTo(100, 100); ctx.lineTo(100, arrowY); ctx.strokeStyle = 'green'; ctx.stroke();
-            ctx.fillText('|0> (frei)', 100, 10); ctx.fillText('|1> (Stau)', 100, 190);
+        function initMultiBloch() {
+            const container = document.getElementById('blochContainer');
+            container.innerHTML = '';
+            for (let i = 0; i < 3; i++) {  // 3 Sphären
+                let canvas = document.createElement('canvas');
+                canvas.width = 200; canvas.height = 200;
+                canvas.id = 'bloch' + i;
+                container.appendChild(canvas);
+            }
+        }
+
+        function drawMultiBloch(probs) {
+            probs.forEach((prob, i) => {
+                const ctx = document.getElementById('bloch' + i).getContext('2d');
+                ctx.clearRect(0, 0, 200, 200);
+                ctx.beginPath(); ctx.arc(100, 100, 90, 0, 2 * Math.PI); ctx.stroke();
+                const arrowY = 100 - 180 * prob + 90;  // Animierter Pfeil (Time-Evolution)
+                ctx.beginPath(); ctx.moveTo(100, 100); ctx.lineTo(100, arrowY); ctx.strokeStyle = 'green'; ctx.stroke();
+                ctx.fillText('|0> (frei)', 100, 10); ctx.fillText('|1> (Stau)', 100, 190);
+                ctx.fillText('Qubit ' + (i+1), 100, 200);  // Label für Multi
+            });
+        }
+
+        function playHorn() {
+            try {
+                let oscillator = audioCtx.createOscillator();
+                oscillator.type = 'square';
+                oscillator.frequency.setValueAtTime(440, audioCtx.currentTime);  // Hup-Ton
+                oscillator.connect(audioCtx.destination);
+                oscillator.start();
+                setTimeout(() => oscillator.stop(), 200);
+            } catch (error) { console.warn('Audio Error:', error); }
         }
 
         function clearCanvas(id) {
@@ -150,7 +191,7 @@
             ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
         }
 
-        initChart();  // Chart initialisieren
+        initChart();
     </script>
 </body>
 </html>
