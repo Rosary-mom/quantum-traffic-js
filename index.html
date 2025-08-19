@@ -1,7 +1,20 @@
 <!DOCTYPE html>
 <html lang="de">
 <head><!-- Test-Commit für Deployment-Trigger -->
-    <title>Quanten-Verkehrssimulation (Tafel-Optimiert)</title>
+    <title>Quanten-Verkehrssimulation (Tafel-Optimiert)</title>freeFlowProbSlider.addEventListener('input', () => {
+  freeFlowProb = parseFloat(freeFlowProbSlider.value) / 100;  // Normalize to 0-1
+  freeFlowProbValue.textContent = `${freeFlowProbSlider.value}%`;
+  p = 1 - freeFlowProb;  // Dynamic p: higher freeFlowProb = lower deceleration chance
+  if (!running) initCars();  // Re-init cars if paused/stopped
+  console.log('Free Flow Prob updated to:', freeFlowProb);  // Debug log
+});
+
+densitySlider.addEventListener('input', () => {
+  density = parseInt(densitySlider.value);
+  densityValue.textContent = density;
+  if (!running) initCars();  // Re-init on density change
+  console.log('Density updated to:', density);
+});
     <script src="https://quantumjavascript.app/q.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
