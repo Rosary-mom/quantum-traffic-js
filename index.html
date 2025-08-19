@@ -1,20 +1,7 @@
 <!DOCTYPE html>
 <html lang="de">
 <head><!-- Test-Commit für Deployment-Trigger -->
-    <title>Quanten-Verkehrssimulation (Tafel-Optimiert)</title>freeFlowProbSlider.addEventListener('input', () => {
-  freeFlowProb = parseFloat(freeFlowProbSlider.value) / 100;  // Normalize to 0-1
-  freeFlowProbValue.textContent = `${freeFlowProbSlider.value}%`;
-  p = 1 - freeFlowProb;  // Dynamic p: higher freeFlowProb = lower deceleration chance
-  if (!running) initCars();  // Re-init cars if paused/stopped
-  console.log('Free Flow Prob updated to:', freeFlowProb);  // Debug log
-});
-
-densitySlider.addEventListener('input', () => {
-  density = parseInt(densitySlider.value);
-  densityValue.textContent = density;
-  if (!running) initCars();  // Re-init on density change
-  console.log('Density updated to:', density);
-});
+    <title>Quanten-Verkehrssimulation (Tafel-Optimiert)</title>
     <script src="https://quantumjavascript.app/q.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -28,17 +15,19 @@ densitySlider.addEventListener('input', () => {
 </head>
 <body>
     <h1>Quanten-Verkehrssimulation</h1>
-    <div id="weather">Wetter in Bitz: Laden...</div>  /* Wetter-Anzeige */
+    <div id="weather">Wetter in Bitz: Laden...</div>
     <div id="controls">
         <label for="probSlider">Freier Fluss-Prob (0-100%):</label>
         <input type="range" id="probSlider" min="0" max="100" value="50">
-        <span id="probValue">50%</span><br>
+        <span id="probValue">50%</span>
+
         <label for="densitySlider">Dichte (1-10):</label>
         <input type="range" id="densitySlider" min="1" max="10" value="5">
-        <span id="densityValue">5</span><br>
-        <button onclick="startSim()">Start</button>
-        <button onclick="pauseSim()">Pause</button>
-        <button onclick="resetSim()">Reset</button>
+        <span id="densityValue">5</span>
+
+        <button id="startBtn">Start</button>
+        <button id="pauseBtn">Pause</button>
+        <button id="resetBtn">Reset</button>
     </div>
     <canvas id="roadCanvas" width="800" height="150"></canvas>
     <canvas id="trafficChart" width="800" height="200"></canvas>
@@ -47,63 +36,214 @@ densitySlider.addEventListener('input', () => {
     <div id="speedDisplay" style="font-size: 50px; color: red;">Geschwindigkeit: 0 km/h</div>  /* Neue Speed-Anzeige */
     <div id="flowDisplay" style="font-size: 50px;">Fluss: 0 Fahrzeuge/h</div>  /* Fluss-Anzeige */
 
-    <script>
-        let simRunning = false;
-        let animationFrame;
-        let time = 0;
-        let flowData = [];
-        let chart;
-        let cars = [];
-        let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        let blochScenes = [];
-        const apiKey = 'DEIN_API_KEY';  /* Ersetze mit deinem OpenWeatherMap-Key (kostenlos anmelden) */
-        const city = 'Bitz,DE';
+<script>
+    let simRunning = false;
+    let animationFrame;
+    let time = 0;
+    let flowData = [];
+    let chart;
+    let cars = [];
+    let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    let blochScenes = [];
+    const apiKey = '035e68e3800487033e1042ee082a96f9';  /* Dein OpenWeatherMap-Key */
+    const city = 'Bitz,DE';
+    let roadLength = 800;
+    let cellSize = 10;
+    let vMax = 5;
+    let p = 0.3;  // Initiale Verzögerungswahrscheinlichkeit
+    let density = 5;
+    let freeFlowProb = 0.5;  // Initial 50%
+    let running = false;
+    const canvas = document.getElementById('roadCanvas');
+    const ctx = canvas.getContext('2d');
+    const status = document.getElementById('status');
+    const speedDisplay = document.getElementById('speedDisplay');
+    const flowDisplay = document.getElementById('flowDisplay');
+    const freeFlowProbSlider = document.getElementById('probSlider');
+    const freeFlowProbValue = document.getElementById('probValue');
+    const densitySlider = document.getElementById('densitySlider');
+    const densityValue = document.getElementById('densityValue');
+    const startBtn = document.getElementById('startBtn');
+    const pauseBtn = document.getElementById('pauseBtn');
+    const resetBtn = document.getElementById('resetBtn');
 
-        // Wetter fetchen (stündlich update)
-        function fetchWeather() {
-            fetch(`https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${apiKey}&units=metric`)
- fetch('https://api.openweathermap.org/data/2.5/weather?q=Bitz&units=metric&appid=035e68e3800487033e1042ee082a96f9')
-  .then(response => response.json())
-  .then(data => {
-    // Update Wetter-Anzeige, z. B. document.getElementById('wetter').innerText = data.weather[0].description;
-  })
-  .catch(error => console.error('Wetter-Fehler:', error));               .then(response => response.json())
-                .then(data => {
-                    const temp = data.main.temp;
-                    const rain = data.rain ? data.rain['1h'] : 0;
-                    const icon = data.weather[0].icon;
-                    document.getElementById('weather').innerHTML = `Temp: ${temp}°C | Regen: ${rain}mm | <img src="http://openweathermap.org/img/w/${icon}.png">`;
-                    if (rain > 0) document.getElementById('weather').style.color = 'red';  /* Blink bei Regen */
-                })
-                .catch(error => console.error('Wetter-Error:', error));
+    // Wetter fetchen (stündlich update)
+    function fetchWeather() {
+        fetch(`https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${apiKey}&units=metric`)
+            .then(response => {
+                if (!response.ok) throw new Error('API-Fehler: ' + response.status);
+                return response.json();
+            })
+            .then(data => {
+                if (data.cod !== 200) throw new Error(data.message);
+                const temp = data.main.temp;
+                const rain = data.rain ? data.rain['1h'] : 0;
+                const icon = data.weather[0].icon;
+                document.getElementById('weather').innerHTML = `Temp: ${temp}°C | Regen: ${rain}mm | <img src="http://openweathermap.org/img/w/${icon}.png">`;
+                if (rain > 0) document.getElementById('weather').style.color = 'red';  /* Blink bei Regen */
+            })
+            .catch(error => {
+                console.error('Wetter-Error:', error);
+                document.getElementById('weather').innerText = 'Wetter konnte nicht geladen werden.';
+            });
+    }
+    setInterval(fetchWeather, 3600000);  /* Stündlich */
+    fetchWeather();  /* Initial */
+
+    // Slider-Event-Listener
+    freeFlowProbSlider.addEventListener('input', () => {
+        freeFlowProb = parseFloat(freeFlowProbSlider.value) / 100;  // Normalize to 0-1
+        freeFlowProbValue.textContent = `${freeFlowProbSlider.value}%`;
+        p = 1 - freeFlowProb;  // Dynamic p: higher freeFlowProb = lower deceleration chance
+        if (!running) initCars();  // Re-init cars if paused/stopped
+        console.log('Free Flow Prob updated to:', freeFlowProb);  // Debug log
+    });
+
+    densitySlider.addEventListener('input', () => {
+        density = parseInt(densitySlider.value);
+        densityValue.textContent = density;
+        if (!running) initCars();  // Re-init on density change
+        console.log('Density updated to:', density);
+    });
+
+    // Traffic Simulation Functions
+    function initCars() {
+        cars = [];
+        for (let i = 0; i < density; i++) {
+            cars.push({ x: Math.floor(Math.random() * roadLength), v: Math.floor(Math.random() * vMax) + 1 });
         }
-        setInterval(fetchWeather, 3600000);  /* Stündlich */
-        fetchWeather();  /* Initial */
+        cars.sort((a, b) => a.x - b.x);
+    }
 
-        // Sliders...
-        // (Rest des Codes wie zuvor, mit Erweiterungen für Speed/Fluss)
+    function getDistanceToNextCar(car) {
+        let minDist = roadLength;
+        cars.forEach(other => {
+            if (other !== car) {
+                let dist = (other.x - car.x + roadLength) % roadLength;
+                if (dist < minDist) minDist = dist;
+            }
+        });
+        return minDist;
+    }
 
-        function updateChart(probFree) {
-            const currentFlow = cars.reduce((acc, car) => acc + car.speed, 0) / cars.length * 60 + Math.sin(time / 10) * 20;
-            flowData.push(currentFlow);
-            chart.data.labels.push(time);
-            chart.data.datasets[0].data.push(currentFlow);
-            chart.update();
-            document.getElementById('flowDisplay').textContent = `Fluss: ${Math.round(currentFlow)} Fahrzeuge/h`;  /* Fluss update */
+    function updateCars() {
+        let totalSpeed = 0;
+        let flow = 0;
+        cars.forEach(car => {
+            let d = getDistanceToNextCar(car);
+            car.v = Math.min(car.v + 1, vMax, d - 1);  // Acceleration
+            if (car.v > 0 && Math.random() < p) car.v--;  // Random deceleration with dynamic p
+            car.x = (car.x + car.v) % roadLength;  // Move
+            totalSpeed += car.v;
+            if (car.x + car.v >= roadLength) flow++;  // Count passing cars
+        });
+        speedDisplay.textContent = `Geschwindigkeit: ${Math.round(totalSpeed / cars.length || 0)} km/h`;
+        flowDisplay.textContent = `Fluss: ${flow} Fahrzeuge/h`;
+    }
+
+    function drawRoad() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = 'gray';
+        ctx.fillRect(0, 75, roadLength, 50);  // Road
+        ctx.fillStyle = 'red';
+        cars.forEach(car => {
+            ctx.fillRect(car.x, 90, cellSize, 20);  // Cars
+        });
+    }
+
+    function animate() {
+        if (running) {
+            updateCars();
+            drawRoad();
+            updateSpeed();
+            updateChart(freeFlowProb);
+            requestAnimationFrame(animate);
         }
+    }
 
-        // Geschwindigkeit simulieren (ersetze mit Radar-Input)
-        function updateSpeed() {
-            const avgSpeed = cars.reduce((acc, car) => acc + car.speed, 0) / cars.length * 3.6;  /* km/h */
-            document.getElementById('speedDisplay').textContent = `Geschwindigkeit: ${Math.round(avgSpeed)} km/h`;
-            if (avgSpeed > 50) document.getElementById('speedDisplay').style.color = 'red';  /* Warnung bei Überschreitung */
+    // Button-Event-Listener (angepasst von onclick zu addEventListener)
+    startBtn.addEventListener('click', () => {
+        if (!running) {
+            running = true;
+            animate();
+            status.textContent = 'Läuft';
+            console.log('Simulation started');
         }
+    });
 
-        // In animate() hinzufügen: updateSpeed();
+    pauseBtn.addEventListener('click', () => {
+        running = false;
+        status.textContent = 'Pausiert';
+        console.log('Simulation paused');
+    });
 
-        // Bloch 3D wie zuvor, mit Rotation
+    resetBtn.addEventListener('click', () => {
+        running = false;
+        cars = [];
+        initCars();
+        drawRoad();
+        status.textContent = 'Bereit';
+        speedDisplay.textContent = 'Geschwindigkeit: 0 km/h';
+        flowDisplay.textContent = 'Fluss: 0 Fahrzeuge/h';
+        console.log('Simulation reset');
+    });
 
-        initChart();
-    </script>
-</body>
+    // Chart Initialisierung
+    function initChart() {
+        const ctxChart = document.getElementById('trafficChart').getContext('2d');
+        chart = new Chart(ctxChart, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Fluss',
+                    data: [],
+                    borderColor: 'blue',
+                    fill: false
+                }]
+            },
+            options: { scales: { y: { beginAtZero: true } } }
+        });
+    }
+
+    function updateChart(probFree) {
+        const currentFlow = cars.reduce((acc, car) => acc + car.v, 0) / cars.length * 60 + Math.sin(time / 10) * 20;
+        flowData.push(currentFlow);
+        chart.data.labels.push(time++);
+        chart.data.datasets[0].data.push(currentFlow);
+        chart.update();
+    }
+
+    // Bloch Sphere (einfache 3D-Visualisierung)
+    function initBloch() {
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer();
+        renderer.setSize(200, 200);
+        document.getElementById('blochContainer').appendChild(renderer.domElement);
+
+        const geometry = new THREE.SphereGeometry(1, 32, 32);
+        const material = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true });
+        const sphere = new THREE.Mesh(geometry, material);
+        scene.add(sphere);
+
+        camera.position.z = 5;
+
+        function animateBloch() {
+            requestAnimationFrame(animateBloch);
+            sphere.rotation.x += 0.01;
+            sphere.rotation.y += 0.01;
+            renderer.render(scene, camera);
+        }
+        animateBloch();
+        blochScenes.push({ scene, camera, renderer });
+    }
+
+    // Initiale Aufrufe
+    initCars();
+    drawRoad();
+    initChart();
+    initBloch();
+</script></body>
 </html>
+
