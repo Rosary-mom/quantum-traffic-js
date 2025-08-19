@@ -49,7 +49,12 @@
         // Wetter fetchen (stündlich update)
         function fetchWeather() {
             fetch(`https://api.openweathermap.org/data/2.5/weather?q=${city}&appid=${apiKey}&units=metric`)
-                .then(response => response.json())
+ fetch('https://api.openweathermap.org/data/2.5/weather?q=Bitz&units=metric&appid=035e68e3800487033e1042ee082a96f9')
+  .then(response => response.json())
+  .then(data => {
+    // Update Wetter-Anzeige, z. B. document.getElementById('wetter').innerText = data.weather[0].description;
+  })
+  .catch(error => console.error('Wetter-Fehler:', error));               .then(response => response.json())
                 .then(data => {
                     const temp = data.main.temp;
                     const rain = data.rain ? data.rain['1h'] : 0;
