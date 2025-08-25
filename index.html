@@ -13,8 +13,8 @@
         #controls { margin: 20px; font-size: 30px; }
         #blochContainer { display: flex; justify-content: center; }
         #weather { font-size: 40px; color: blue; }
-        #tafelImages { display: flex; justify-content: center; flex-wrap: wrap; margin: 20px; }
-        #tafelImages img { width: 300px; height: auto; margin: 10px; border: 2px solid blue; }
+        #tafelImage { margin: 20px auto; display: block; } /* Einzelne Tafel zentriert */
+        #tafelImage img { width: 600px; height: auto; border: 3px solid blue; box-shadow: 0 4px 8px rgba(0,0,0,0.2); } /* Hervorgehobene Darstellung */
     </style>
 </head>
 <body>
@@ -37,11 +37,8 @@
     <div id="status">Bereit</div>
     <div id="speedDisplay" style="font-size: 50px; color: red;">Geschwindigkeit: 0 km/h</div>
     <div id="flowDisplay" style="font-size: 50px;">Fluss: 0 Fahrzeuge/h</div>
-    <div id="tafelImages">
-        <img src="images/Bild1.png" alt="Regenwahrscheinlichkeit Welle">
-        <img src="images/Bild2.png" alt="Blaue Welle und Bloch-Sphären">
-        <img src="images/Bild3.png" alt="Futuristisches Regen-Schild">
-        <img src="images/Bild4.png" alt="Negative Welle mit Autos">
+    <div id="tafelImage">
+        <img src="images/Bild2.png.jpg" alt="Blaue Welle und Bloch-Sphären">
     </div>
     <script>
         let simRunning = false;
