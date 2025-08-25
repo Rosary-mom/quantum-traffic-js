@@ -1,7 +1,23 @@
 <!DOCTYPE html>
 <html lang="de">
 <head><!-- Test-Commit für Deployment-Trigger -->
-    <title>Quanten-Verkehrssimulation (Tafel-Optimiert)</title>
+    <title>Quanten-Verkehrssimulation (Tafel-Optimiert)</title><canvas id="trafficCanvas" width="600" height="400"></canvas>
+<script>
+  const canvas = document.getElementById('trafficCanvas');
+  const ctx = canvas.getContext('2d');
+
+  // Simple traffic sim with quantum-like randomness
+  function simulateTraffic() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    for (let i = 0; i < 10; i++) {
+      let x = Math.random() * canvas.width;
+      let y = Math.random() * canvas.height;
+      ctx.fillStyle = 'blue'; // Car
+      ctx.fillRect(x, y, 10, 5);
+    }
+  }
+  setInterval(simulateTraffic, 1000); // Update every second
+</script>
     <script src="https://quantumjavascript.app/q.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
