@@ -1,34 +1,20 @@
 <!DOCTYPE html>
 <html lang="de">
-<head><!-- Test-Commit für Deployment-Trigger -->
-    <title>Quanten-Verkehrssimulation (Tafel-Optimiert)</title><canvas id="trafficCanvas" width="600" height="400"></canvas>
-<script><script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.0.0/math.js"></script>
-  const canvas = document.getElementById('trafficCanvas');
-  const ctx = canvas.getContext('2d');
-
-  // Simple traffic sim with quantum-like randomness
-  function simulateTraffic() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    for (let i = 0; i < 10; i++) {
-      let x = Math.random() * canvas.width;
-      let y = Math.random() * canvas.height;
-      ctx.fillStyle = 'blue'; // Car
-      ctx.fillRect(x, y, 10, 5);
-    }
-  }
-  setInterval(simulateTraffic, 1000); // Update every second
-</script>
+<head>
+    <title>Quanten-Verkehrssimulation (Tafel-Optimiert)</title>
+    <canvas id="trafficCanvas" width="600" height="400"></canvas>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjs/11.0.0/math.js"></script>
     <script src="https://quantumjavascript.app/q.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
-        body { font-family: Arial; text-align: center; font-size: 24px; }  /* Größere Fonts für Sichtbarkeit */
+        body { font-family: Arial; text-align: center; font-size: 24px; }
         canvas { border: 1px solid #000; margin: 10px; width: 100%; }
         #controls { margin: 20px; font-size: 30px; }
         #blochContainer { display: flex; justify-content: center; }
-        #weather { font-size: 40px; color: blue; }  /* Wetter deutlich sichtbar */
-        #tafelImages { display: flex; justify-content: center; flex-wrap: wrap; margin: 20px; }  /* Neu: Galerie für Tafel-Bilder */
-        #tafelImages img { width: 300px; height: auto; margin: 10px; border: 2px solid blue; }  /* Stil für Bilder */
+        #weather { font-size: 40px; color: blue; }
+        #tafelImages { display: flex; justify-content: center; flex-wrap: wrap; margin: 20px; }
+        #tafelImages img { width: 300px; height: auto; margin: 10px; border: 2px solid blue; }
     </style>
 </head>
 <body>
@@ -51,15 +37,12 @@
     <div id="status">Bereit</div>
     <div id="speedDisplay" style="font-size: 50px; color: red;">Geschwindigkeit: 0 km/h</div>
     <div id="flowDisplay" style="font-size: 50px;">Fluss: 0 Fahrzeuge/h</div>
-
-    <!-- Neu: Tafel-Bilder einbinden -->
     <div id="tafelImages">
         <img src="images/Bild1.png" alt="Regenwahrscheinlichkeit Welle">
         <img src="images/Bild2.png" alt="Blaue Welle und Bloch-Sphären">
         <img src="images/Bild3.png" alt="Futuristisches Regen-Schild">
         <img src="images/Bild4.png" alt="Negative Welle mit Autos">
     </div>
-
     <script>
         let simRunning = false;
         let animationFrame;
@@ -69,14 +52,14 @@
         let cars = [];
         let audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         let blochScenes = [];
-        const apiKey = '035e68e3800487033e1042ee082a96f9';  /* Dein OpenWeatherMap-Key */
+        const apiKey = '035e68e3800487033e1042ee082a96f9'; /* Dein OpenWeatherMap-Key */
         const city = 'Bitz,DE';
         let roadLength = 800;
         let cellSize = 10;
         let vMax = 5;
-        let p = 0.3;  // Initiale Verzögerungswahrscheinlichkeit
+        let p = 0.3; // Initiale Verzögerungswahrscheinlichkeit
         let density = 5;
-        let freeFlowProb = 0.5;  // Initial 50%
+        let freeFlowProb = 0.5; // Initial 50%
         let running = false;
         const canvas = document.getElementById('roadCanvas');
         const ctx = canvas.getContext('2d');
@@ -211,7 +194,7 @@
             console.log('Simulation reset');
         });
 
-        // Chart und Bloch wie in deiner Version
+        // Chart
         function initChart() {
             const ctxChart = document.getElementById('trafficChart').getContext('2d');
             chart = new Chart(ctxChart, {
@@ -232,25 +215,24 @@
         function updateChart(probFree) {
             const currentFlow = cars.reduce((acc, car) => acc + car.v, 0) / cars.length * 60 + Math.sin(time / 10) * 20;
             flowData.push(currentFlow);
+            if (flowData.length > 100) flowData.shift(); // Limit data points
             chart.data.labels.push(time++);
-            chart.data.datasets[0].data.push(currentFlow);
+            chart.data.datasets[0].data = flowData;
             chart.update();
         }
 
+        // Bloch Sphere
         function initBloch() {
             const scene = new THREE.Scene();
             const camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
             const renderer = new THREE.WebGLRenderer();
             renderer.setSize(200, 200);
             document.getElementById('blochContainer').appendChild(renderer.domElement);
-
             const geometry = new THREE.SphereGeometry(1, 32, 32);
             const material = new THREE.MeshBasicMaterial({ color: 0x00ff00, wireframe: true });
             const sphere = new THREE.Mesh(geometry, material);
             scene.add(sphere);
-
             camera.position.z = 5;
-
             function animateBloch() {
                 requestAnimationFrame(animateBloch);
                 sphere.rotation.x += 0.01;
